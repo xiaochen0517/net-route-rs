@@ -1,6 +1,3 @@
-mod route;
-mod base;
-
 fn main() {
-    println!("Hello, world!");
+    net_route_rs_lib::run();
 }

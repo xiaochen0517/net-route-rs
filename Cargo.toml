@@ -3,6 +3,10 @@ name = "net-route-rs"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "net_route_rs_lib"
+
 [dependencies]
-clap = "4.5.32"
+clap = { version = "4.5.32", features = ["derive"] }
+prettytable-rs = "0.10.0"
 winroute = "0.2.1"
