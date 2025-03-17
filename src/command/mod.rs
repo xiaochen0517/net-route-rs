@@ -19,6 +19,12 @@ pub enum Commands {
         #[command(subcommand)]
         action: RouteActions,
     },
+    /// 获取网络接口
+    Interface {
+        /// 获取网络接口列表
+        #[command(subcommand)]
+        action: InterfaceActions,
+    },
 }
 
 #[derive(Subcommand)]
@@ -35,8 +41,15 @@ pub enum RouteActions {
     },
 }
 
+#[derive(Subcommand)]
+pub enum InterfaceActions {
+    /// 展示网络接口列表
+    List {},
+}
+
 fn less_than_one_error(s: &str) -> Result<usize, String> {
-    let value = s.parse::<usize>()
+    let value = s
+        .parse::<usize>()
         .map_err(|_| String::from("Invalid page size"))?;
 
     if value < 1 {

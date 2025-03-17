@@ -1,11 +1,11 @@
-mod base;
-mod command;
-mod route;
-
 #[macro_use]
 extern crate prettytable;
+mod base;
+mod command;
+mod interface;
+mod route;
 
-use crate::command::{Cli, Commands, RouteActions};
+use crate::command::{Cli, Commands, InterfaceActions, RouteActions};
 use clap::Parser;
 
 pub fn run() {
@@ -27,6 +27,11 @@ pub fn run() {
             Commands::Route { action } => match action {
                 RouteActions::List { page, page_size } => {
                     route::show_route_list(*page_size, *page);
+                }
+            },
+            Commands::Interface { action } => match action {
+                InterfaceActions::List {} => {
+                    interface::show_interface_list();
                 }
             },
         },

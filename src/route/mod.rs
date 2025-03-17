@@ -53,7 +53,9 @@ pub fn show_route_list(page_size: usize, page: usize) {
     println!();
     println!(
         "总数: {}, 总页数: {}, 当前页: {}",
-        total_items, total_pages, current_page + 1
+        total_items,
+        total_pages,
+        current_page + 1
     );
 
     // 实现表格展示路由列表

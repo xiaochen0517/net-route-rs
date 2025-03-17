@@ -14,7 +14,7 @@ impl fmt::Display for NetRouteError {
 
 impl Error for NetRouteError {}
 
-// Optional: Add constructor for convenience
+#[allow(dead_code)]
 impl NetRouteError {
     pub fn new(message: impl Into<String>) -> Self {
         NetRouteError {
@@ -23,7 +23,7 @@ impl NetRouteError {
     }
 
     // Optional: Add conversion from other error types
-    pub fn from_err<E: std::error::Error>(err: E) -> Self {
+    pub fn from_err<E: Error>(err: E) -> Self {
         Self {
             message: err.to_string(),
         }
@@ -39,6 +39,8 @@ impl From<String> for NetRouteError {
 
 impl From<&str> for NetRouteError {
     fn from(message: &str) -> Self {
-        Self { message: message.to_string() }
+        Self {
+            message: message.to_string(),
+        }
     }
 }
