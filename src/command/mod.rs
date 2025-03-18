@@ -7,6 +7,7 @@ pub struct Cli {
     #[arg(short, long, default_value_t = 0)]
     pub debug: u8,
 
+    /// 命令行参数
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -27,6 +28,7 @@ pub enum Commands {
     },
 }
 
+/// 路由相关指令
 #[derive(Subcommand)]
 pub enum RouteActions {
     /// 展示路由列表
@@ -41,12 +43,19 @@ pub enum RouteActions {
     },
 }
 
+/// 网络接口相关指令
 #[derive(Subcommand)]
 pub enum InterfaceActions {
     /// 展示网络接口列表
     List {},
 }
 
+/// 检查输入的内容是否小于 1，如果小于 1 则返回错误
+///
+/// # Arguments
+///
+/// * `s` - 输入的字符串
+///
 fn less_than_one_error(s: &str) -> Result<usize, String> {
     let value = s
         .parse::<usize>()

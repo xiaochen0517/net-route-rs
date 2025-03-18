@@ -26,37 +26,45 @@ impl WinRoute {
     }
 }
 
-pub fn show_route_list(page_size: usize, page: usize) {
-    // 获取路由列表
-    let win_route = WinRoute::new()
-        .map_err(|e| {
-            eprintln!("Get route manager failed, error msg: {}", e.message);
-        })
-        .unwrap();
-    let routes = win_route
-        .get_routes()
-        .map_err(|e| {
-            eprintln!("Get route list failed, error msg: {}", e.message);
-        })
-        .unwrap();
-
-    // 计算总页数
-    let page = page - 1;
-    let total_items = routes.len();
-    let total_pages = (total_items + page_size - 1) / page_size;
+/// 计算总页数和当前页码并打印信息
+/// 
+/// # Arguments
+/// 
+/// * `total_size` - 总数据量
+/// * `page_size` - 每页数据量
+/// * `current_page` - 当前页码，从 1 开始
+/// 
+fn parse_page_info(total_size: usize, page_size: usize, current_page: usize) -> usize {
+    let total_pages = (total_size + page_size - 1) / page_size;
     // 计算当前页码
-    let current_page = if page >= total_pages {
-        total_pages - 1
+    let current_page = if current_page > total_pages {
+        total_pages
     } else {
-        page
+        current_page
     };
-    println!();
     println!(
         "总数: {}, 总页数: {}, 当前页: {}",
-        total_items,
+        total_size,
         total_pages,
-        current_page + 1
+        current_page
     );
+    current_page
+}
+
+/// 展示路由列表
+/// 
+/// # Arguments
+/// 
+/// * `page_size` - 每页展示数量
+/// * `current_page` - 当前页码，从 1 开始
+/// 
+pub fn show_route_list(page_size: usize, current_page: usize) -> Result<(), NetRouteError> {
+    // 获取路由列表
+    let win_route = WinRoute::new()?;
+    let routes = win_route.get_routes()?;
+
+    // 计算总页数
+    let current_page = parse_page_info(routes.len(), page_size, current_page);
 
     // 实现表格展示路由列表
     let mut table = Table::new();
@@ -69,7 +77,7 @@ pub fn show_route_list(page_size: usize, page: usize) {
         "LUID",
         "协议版本"
     ]);
-    for route in routes.iter().skip(page * page_size).take(page_size) {
+    for route in routes.iter().skip((current_page - 1) * page_size).take(page_size) {
         table.add_row(row![
             route.destination.to_string(),
             route.prefix.to_string(),
@@ -81,6 +89,7 @@ pub fn show_route_list(page_size: usize, page: usize) {
         ]);
     }
     table.printstd();
+    Ok(())
 }
 
 #[cfg(test)]
