@@ -41,6 +41,38 @@ pub enum RouteActions {
         #[arg(long, default_value_t = 1, value_parser = less_than_one_error)]
         page: usize,
     },
+    /// 添加路由
+    Add {
+        /// 添加路由方法类型
+        #[command(subcommand)]
+        action: RouteAddActions,
+    },
+}
+
+/// 添加路由方法类型
+#[derive(Subcommand)]
+pub enum RouteAddActions {
+    Ip {
+        /// 目标 IP 地址
+        #[arg(long = "dest")]
+        destination: String,
+
+        /// 目标 IP 子网掩码
+        #[arg(long, default_value_t = 32)]
+        prefix: u8,
+
+        /// 网卡索引
+        #[arg(long = "ifindex")]
+        if_index: u32,
+
+        /// 网关 IP 地址
+        #[arg(long)]
+        gateway: Option<String>,
+
+        /// 路由度量值，值越小优先级越高
+        #[arg(long, default_value_t = 0)]
+        metric: u32,
+    },
 }
 
 /// 网络接口相关指令

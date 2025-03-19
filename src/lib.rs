@@ -6,11 +6,11 @@ mod interface;
 mod route;
 
 use crate::base::NetRouteError;
-use crate::command::{Cli, Commands, InterfaceActions, RouteActions};
+use crate::command::{Cli, Commands, InterfaceActions, RouteActions, RouteAddActions};
 use clap::Parser;
 
 /// 程序入口主方法
-/// 
+///
 pub fn run() -> Result<(), NetRouteError> {
     let cli = Cli::parse();
 
@@ -27,6 +27,15 @@ pub fn run() -> Result<(), NetRouteError> {
         Some(command) => match command {
             Commands::Route { action } => match action {
                 RouteActions::List { page, page_size } => route::show_route_list(*page_size, *page),
+                RouteActions::Add { action } => match action {
+                    RouteAddActions::Ip {
+                        destination,
+                        prefix,
+                        if_index,
+                        gateway,
+                        metric,
+                    } => route::add_route(destination, prefix, if_index, gateway, metric),
+                },
             },
             Commands::Interface { action } => match action {
                 InterfaceActions::List {} => interface::show_interface_list(),

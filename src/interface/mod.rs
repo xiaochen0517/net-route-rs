@@ -12,9 +12,31 @@ impl Interface {
     }
 
     pub fn get_interfaces(&self) -> Result<Vec<Adapter>, NetRouteError> {
-        ipconfig::get_adapters().map_err(|e| NetRouteError {
-            message: e.to_string(),
-        })
+        ipconfig::get_adapters().map_err(|e| NetRouteError::new(e.to_string()))
+    }
+
+    pub fn get_interface_by_index(&self, index: &u32) -> Result<Adapter, NetRouteError> {
+        ipconfig::get_adapters()
+            .map_err(|e| NetRouteError::new(e.to_string()))
+            .and_then(|adapters| {
+                adapters
+                    .into_iter()
+                    .find(|adapter| adapter.ipv6_if_index() == *index)
+                    .ok_or(NetRouteError::new(format!(
+                        "Adapter with index {} not found",
+                        index
+                    )))
+            })
+    }
+
+    pub fn get_ipv4_gateway(adapter: &Adapter) -> Result<IpAddr, NetRouteError> {
+        let gateways = adapter.gateways();
+        for gateway in gateways {
+            if let IpAddr::V4(ipv4) = gateway {
+                return Ok(IpAddr::V4(*ipv4));
+            }
+        }
+        Err(NetRouteError::new("No IPv4 gateway found".to_string()))
     }
 }
 
@@ -42,11 +64,11 @@ fn parse_address_list_to_string(addresses: &[IpAddr]) -> String {
 }
 
 /// 将网卡类型转换为字符串
-/// 
+///
 /// 如果网卡类型未知，则返回 "未知"
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `if_type` - 网卡类型
 fn parse_if_type(if_type: ipconfig::IfType) -> String {
     match if_type {
@@ -65,13 +87,13 @@ fn parse_if_type(if_type: ipconfig::IfType) -> String {
 }
 
 /// 将 MAC 地址转换为字符串
-/// 
+///
 /// 如果没有 MAC 地址，则返回 "N/A"
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `mac_address` - MAC 地址
-/// 
+///
 fn parse_mac_address(mac_address: Option<&[u8]>) -> String {
     mac_address
         // 将 u8 数组转换为十六进制字符串，中间用冒号分隔
@@ -85,7 +107,7 @@ fn parse_mac_address(mac_address: Option<&[u8]>) -> String {
 }
 
 /// 将 IP 地址列表转换为字符串
-/// 
+///
 pub fn show_interface_list() -> Result<(), NetRouteError> {
     let interface = Interface::new();
     let adapters = interface.get_interfaces()?;
