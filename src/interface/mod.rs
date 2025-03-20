@@ -1,27 +1,64 @@
 use crate::base::NetRouteError;
 use ipconfig;
-use ipconfig::Adapter;
+use ipconfig::IfType;
+use network_interface::NetworkInterface;
+use network_interface::NetworkInterfaceConfig;
 use prettytable::Table;
 use std::net::IpAddr;
 
 pub struct Interface;
+
+pub struct AdapterInfo {
+    pub name: String,
+    pub index: u32,
+    pub mac_address: String,
+    pub ip_address: String,
+    pub gateway: String,
+    pub if_type: IfType,
+}
 
 impl Interface {
     pub fn new() -> Self {
         Interface
     }
 
-    pub fn get_interfaces(&self) -> Result<Vec<Adapter>, NetRouteError> {
-        ipconfig::get_adapters().map_err(|e| NetRouteError::new(e.to_string()))
+    pub fn get_interfaces(&self) -> Result<Vec<AdapterInfo>, NetRouteError> {
+        // 使用 network-interface 获取适配器信息，备用
+        let ni_interfaces =
+            NetworkInterface::show().map_err(|e| NetRouteError::new(e.to_string()))?;
+        // 获取所有适配器信息
+        let adapter_info_vec = ipconfig::get_adapters()
+            .map_err(|e| NetRouteError::new(e.to_string()))?
+            .into_iter()
+            .map(|adapter| {
+                let mac_address = parse_mac_address(adapter.physical_address());
+                // 判断当前是否有获取不到 index 的适配器
+                let mut index = adapter.ipv6_if_index();
+                if index == 0 {
+                    index = find_interface_index_by_mac(&ni_interfaces, &mac_address);
+                }
+                // 转换对象
+                AdapterInfo {
+                    name: adapter.friendly_name().to_string(),
+                    index,
+                    mac_address: mac_address.unwrap_or("N/A".to_string()),
+                    ip_address: parse_address_list_to_string(adapter.ip_addresses()),
+                    gateway: parse_address_list_to_string(adapter.gateways()),
+                    if_type: adapter.if_type(),
+                }
+            })
+            .collect();
+
+        Ok(adapter_info_vec)
     }
 
-    pub fn get_interface_by_index(&self, index: &u32) -> Result<Adapter, NetRouteError> {
-        ipconfig::get_adapters()
+    pub fn get_interface_by_index(&self, index: &u32) -> Result<AdapterInfo, NetRouteError> {
+        self.get_interfaces()
             .map_err(|e| NetRouteError::new(e.to_string()))
             .and_then(|adapters| {
                 adapters
                     .into_iter()
-                    .find(|adapter| adapter.ipv6_if_index() == *index)
+                    .find(|adapter| adapter.index == *index)
                     .ok_or(NetRouteError::new(format!(
                         "Adapter with index {} not found",
                         index
@@ -29,15 +66,35 @@ impl Interface {
             })
     }
 
-    pub fn get_ipv4_gateway(adapter: &Adapter) -> Result<IpAddr, NetRouteError> {
-        let gateways = adapter.gateways();
-        for gateway in gateways {
-            if let IpAddr::V4(ipv4) = gateway {
-                return Ok(IpAddr::V4(*ipv4));
-            }
-        }
-        Err(NetRouteError::new("No IPv4 gateway found".to_string()))
+    pub fn get_ipv4_gateway(adapter: &AdapterInfo) -> Result<IpAddr, NetRouteError> {
+        // 获取网关地址
+        let gateway = adapter
+            .gateway
+            .parse::<IpAddr>()
+            .map_err(|e| NetRouteError::new(e.to_string()))?;
+        Ok(gateway)
     }
+}
+
+fn find_interface_index_by_mac(
+    network_interfaces: &Vec<NetworkInterface>,
+    mac_address: &Option<String>,
+) -> u32 {
+    let mac_address = match mac_address {
+        Some(mac) => mac,
+        None => return 0,
+    };
+    network_interfaces
+        .iter()
+        .find(|interface| {
+            if let Some(mac) = &interface.mac_addr {
+                mac.to_uppercase() == mac_address.to_uppercase()
+            } else {
+                false
+            }
+        })
+        .map(|interface| interface.index)
+        .unwrap_or(0)
 }
 
 /// 将 IP 地址列表转换为字符串
@@ -70,18 +127,18 @@ fn parse_address_list_to_string(addresses: &[IpAddr]) -> String {
 /// # Arguments
 ///
 /// * `if_type` - 网卡类型
-fn parse_if_type(if_type: ipconfig::IfType) -> String {
+fn parse_if_type(if_type: IfType) -> String {
     match if_type {
-        ipconfig::IfType::Other => String::from("其他"),
-        ipconfig::IfType::EthernetCsmacd => String::from("以太网"),
-        ipconfig::IfType::Iso88025Tokenring => String::from("令牌环"),
-        ipconfig::IfType::Ppp => String::from("点对点协议"),
-        ipconfig::IfType::SoftwareLoopback => String::from("软件回环"),
-        ipconfig::IfType::Atm => String::from("ATM"),
-        ipconfig::IfType::Ieee80211 => String::from("无线局域网"),
-        ipconfig::IfType::Tunnel => String::from("隧道"),
-        ipconfig::IfType::Ieee1394 => String::from("IEEE 1394"),
-        ipconfig::IfType::Unsupported => String::from("不支持"),
+        IfType::Other => String::from("其他"),
+        IfType::EthernetCsmacd => String::from("以太网"),
+        IfType::Iso88025Tokenring => String::from("令牌环"),
+        IfType::Ppp => String::from("点对点协议"),
+        IfType::SoftwareLoopback => String::from("软件回环"),
+        IfType::Atm => String::from("ATM"),
+        IfType::Ieee80211 => String::from("无线局域网"),
+        IfType::Tunnel => String::from("隧道"),
+        IfType::Ieee1394 => String::from("IEEE 1394"),
+        IfType::Unsupported => String::from("不支持"),
         _ => String::from("未知"),
     }
 }
@@ -94,7 +151,7 @@ fn parse_if_type(if_type: ipconfig::IfType) -> String {
 ///
 /// * `mac_address` - MAC 地址
 ///
-fn parse_mac_address(mac_address: Option<&[u8]>) -> String {
+fn parse_mac_address(mac_address: Option<&[u8]>) -> Option<String> {
     mac_address
         // 将 u8 数组转换为十六进制字符串，中间用冒号分隔
         .map(|mac| {
@@ -103,7 +160,6 @@ fn parse_mac_address(mac_address: Option<&[u8]>) -> String {
                 .collect::<Vec<String>>()
                 .join(":")
         })
-        .unwrap_or_else(|| "N/A".to_string())
 }
 
 /// 将 IP 地址列表转换为字符串
@@ -116,22 +172,20 @@ pub fn show_interface_list() -> Result<(), NetRouteError> {
     let mut table = Table::new();
     table.add_row(row![
         "网卡类型",
-        "网卡Index",
+        "INDEX",
         "网卡名称",
-        "网卡ID",
         "IP地址",
         "MAC地址",
         "网关地址"
     ]);
     for adapter in adapters {
         table.add_row(row![
-            parse_if_type(adapter.if_type()),
-            adapter.ipv6_if_index(),
-            adapter.description(),
-            adapter.adapter_name(),
-            parse_address_list_to_string(adapter.ip_addresses()),
-            parse_mac_address(adapter.physical_address()),
-            parse_address_list_to_string(adapter.gateways())
+            parse_if_type(adapter.if_type),
+            adapter.index,
+            adapter.name,
+            adapter.ip_address,
+            adapter.mac_address,
+            adapter.gateway,
         ]);
     }
     table.printstd();

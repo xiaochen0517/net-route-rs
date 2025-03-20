@@ -9,5 +9,6 @@ name = "net_route_rs_lib"
 [dependencies]
 clap = { version = "4.5.32", features = ["derive"] }
 ipconfig = "0.3.2"
+network-interface = "2.0.0"
 prettytable-rs = "0.10.0"
 winroute = "0.2.1"
