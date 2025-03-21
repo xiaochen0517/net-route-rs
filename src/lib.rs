@@ -34,7 +34,8 @@ pub fn run() -> Result<(), NetRouteError> {
                         if_index,
                         gateway,
                         metric,
-                    } => route::add_route(destination, prefix, if_index, gateway, metric),
+                        no_check,
+                    } => route::add_route(destination, prefix, if_index, gateway, metric, no_check),
                 },
             },
             Commands::Interface { action } => match action {

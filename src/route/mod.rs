@@ -1,7 +1,9 @@
 use crate::base::NetRouteError;
-use crate::interface::Interface;
+use crate::interface::{AdapterInfo, Interface};
+use encoding_rs::GBK;
 use prettytable::Table;
 use std::net::IpAddr;
+use std::process::Command;
 use winroute::*;
 
 struct WinRoute {
@@ -28,17 +30,13 @@ impl WinRoute {
         destination: IpAddr,
         prefix: &u8,
         if_index: &u32,
-        gateway: Option<IpAddr>,
+        gateway: IpAddr,
         metric: &u32,
     ) -> Result<(), NetRouteError> {
-        // 检查if_index网卡是否存在
-        let interface = Interface::new();
-        let adapter = interface.get_interface_by_index(if_index)?;
-        let ipv4_gateway = Interface::get_ipv4_gateway(&adapter)?;
         // 创建路由
         let mut route = Route::new(destination, *prefix);
         route = route.ifindex(*if_index);
-        route = route.gateway(gateway.unwrap_or(ipv4_gateway));
+        route = route.gateway(gateway);
         route = route.metric(*metric);
         self.manager
             .add_route(&route)
@@ -46,6 +44,53 @@ impl WinRoute {
         println!("添加路由成功: {:?}", route);
         Ok(())
     }
+}
+
+/// 使用指定网卡的IP地址进行ping测试
+///
+/// # Arguments
+///
+/// * `target_ip` - 目标IP地址
+/// * `adapter_info` - 网卡信息
+///
+pub fn ping_from_interface(
+    target_ip: &String,
+    adapter_info: &AdapterInfo,
+) -> Result<bool, NetRouteError> {
+    // 获取网卡的IP地址作为源地址
+    let source_ip = &adapter_info.ip_address;
+
+    println!(
+        "使用网卡 {} (IP: {}) 测试连接到 {}",
+        adapter_info.name, source_ip, target_ip
+    );
+
+    // 在Windows上使用ping命令，通过-S参数指定源IP
+    let output = Command::new("ping")
+        .args(&[
+            "-n", "4", // 发送4个数据包
+            "-w", "1000", // 超时时间1秒
+            "-S", &source_ip, // 指定源IP地址
+            target_ip,  // 目标IP地址
+        ])
+        .output()
+        .map_err(|e| NetRouteError::new(format!("网络通路测试失败: {}", e)))?;
+
+    let output_str = GBK.decode(&output.stdout).0.into_owned();
+
+    // 检查是否收到回复
+    let success = output_str.contains("来自")
+        && output_str.contains("字节=")
+        && !output_str.contains("100% 丢失");
+
+    if success {
+        println!("连接测试成功，目标IP可达");
+    } else {
+        println!("连接测试失败，无法连接到目标IP");
+        println!("详细输出: \n{}", output_str);
+    }
+
+    Ok(success)
 }
 
 /// 计算总页数和当前页码并打印信息
@@ -116,27 +161,46 @@ pub fn show_route_list(page_size: usize, current_page: usize) -> Result<(), NetR
     Ok(())
 }
 
+/// 添加路由
+///
+/// # Arguments
+///
+/// * `destination` - 目标 IP 地址
+/// * `prefix` - 目标 IP 子网掩码
+/// * `if_index` - 网卡索引
+/// * `gateway` - 网关 IP 地址
+/// * `metric` - 路由度量值，值越小优先级越高
+/// * `no_check` - 是否检查目标地址是否可达
+///
 pub fn add_route(
     destination: &String,
     prefix: &u8,
     if_index: &u32,
     gateway: &Option<String>,
     metric: &u32,
+    no_check: &bool,
 ) -> Result<(), NetRouteError> {
-    let win_route = WinRoute::new()?;
+    // 检查if_index网卡是否存在
+    let interface = Interface::new();
+    let adapter = interface.get_interface_by_index(if_index)?;
+    let ipv4_gateway = Interface::get_ipv4_gateway(&adapter)?;
     // 解析目标地址
-    let destination: IpAddr = destination.parse().map_err(|_| {
+    let dest_ip: IpAddr = destination.parse().map_err(|_| {
         NetRouteError::new(format!("Invalid destination IP address: {}", destination))
     })?;
+    // 检查目标地址和网卡是否可达
+    if !*no_check {
+        ping_from_interface(destination, &adapter)?;
+    }
     // 解析网关地址
-    let gateway: Option<IpAddr> =
-        match gateway {
-            Some(gateway) => Some(gateway.parse().map_err(|_| {
-                NetRouteError::new(format!("Invalid gateway IP address: {}", gateway))
-            })?),
-            None => None,
-        };
-    win_route.add_ip_route(destination, prefix, if_index, gateway, metric)
+    let gateway: IpAddr = match gateway {
+        Some(gateway) => gateway
+            .parse()
+            .map_err(|_| NetRouteError::new(format!("Invalid gateway IP address: {}", gateway)))?,
+        None => ipv4_gateway,
+    };
+    let win_route = WinRoute::new()?;
+    win_route.add_ip_route(dest_ip, prefix, if_index, gateway, metric)
 }
 
 #[cfg(test)]

@@ -72,6 +72,10 @@ pub enum RouteAddActions {
         /// 路由度量值，值越小优先级越高
         #[arg(long, default_value_t = 0)]
         metric: u32,
+
+        /// 是否检查目标地址是否可达
+        #[arg(long, default_value_t = false)]
+        no_check: bool,
     },
 }
 
