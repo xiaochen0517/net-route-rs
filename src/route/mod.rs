@@ -1,4 +1,4 @@
-use crate::base::NetRouteError;
+use crate::base::{user_input, NetRouteError};
 use crate::interface::{AdapterInfo, Interface};
 use encoding_rs::GBK;
 use prettytable::Table;
@@ -25,6 +25,26 @@ impl WinRoute {
         }
     }
 
+    pub fn search_route(
+        &self,
+        dest: &IpAddr,
+        prefix: &u8,
+        if_index: Option<&u32>,
+        gateway: Option<&IpAddr>,
+    ) -> Result<Vec<Route>, NetRouteError> {
+        Ok(self
+            .get_routes()?
+            .into_iter()
+            .filter(|route| {
+                // 根据提供的参数过滤路由
+                (route.destination == *dest)
+                    && (route.prefix == *prefix)
+                    && (if_index.is_none() || route.ifindex == Some(*if_index.unwrap()))
+                    && (gateway.is_none() || route.gateway == *gateway.unwrap())
+            })
+            .collect::<Vec<Route>>())
+    }
+
     pub fn add_ip_route(
         &self,
         destination: IpAddr,
@@ -38,10 +58,29 @@ impl WinRoute {
         route = route.ifindex(*if_index);
         route = route.gateway(gateway);
         route = route.metric(*metric);
+        // 查询路由表
+        let search_route_vec = self.search_route(&destination, prefix, Some(if_index), None)?;
+        if !search_route_vec.is_empty() {
+            println!("路由表中已存在匹配的路由！");
+            show_route_table(&search_route_vec);
+            return Err(NetRouteError::new("路由已存在".to_string()));
+        }
         self.manager
             .add_route(&route)
             .map_err(|err| NetRouteError::new(format!("添加路由错误: {}", err)))?;
-        println!("添加路由成功: {:?}", route);
+        // 显示路由表
+        println!("路由添加成功！");
+        show_route_table(&vec![route]);
+        Ok(())
+    }
+
+    pub fn remove_route(&self, route: &Route) -> Result<(), NetRouteError> {
+        self.manager
+            .delete_route(route)
+            .map_err(|err| NetRouteError::new(format!("删除路由错误: {}", err)))?;
+        // 显示路由表
+        println!("路由移除成功！");
+        show_route_table(&vec![route.clone()]);
         Ok(())
     }
 }
@@ -68,7 +107,7 @@ pub fn ping_from_interface(
     // 在Windows上使用ping命令，通过-S参数指定源IP
     let output = Command::new("ping")
         .args(&[
-            "-n", "4", // 发送4个数据包
+            "-n", "2", // 发送4个数据包
             "-w", "1000", // 超时时间1秒
             "-S", &source_ip, // 指定源IP地址
             target_ip,  // 目标IP地址
@@ -116,6 +155,40 @@ fn parse_page_info(total_size: usize, page_size: usize, current_page: usize) -> 
     current_page
 }
 
+/// 展示路由列表表格
+///
+/// # Arguments
+///
+/// * `route_vec` - 路由列表
+///
+pub fn show_route_table(route_vec: &Vec<Route>) {
+    // 实现表格展示路由列表
+    let mut table = Table::new();
+    table.add_row(row![
+        "序号",
+        "目标地址",
+        "prefix",
+        "网关地址",
+        "目标网卡",
+        "metric",
+        "LUID",
+        "协议版本"
+    ]);
+    for (idx, route) in route_vec.iter().enumerate() {
+        table.add_row(row![
+            idx, // 添加从0开始的序号
+            route.destination.to_string(),
+            route.prefix.to_string(),
+            route.gateway.to_string(),
+            route.ifindex.map_or("NONE".to_string(), |v| v.to_string()),
+            route.metric.map_or("NONE".to_string(), |v| v.to_string()),
+            route.luid.map_or("NONE".to_string(), |v| v.to_string()),
+            format!("IPv{}", route.version)
+        ]);
+    }
+    table.printstd();
+}
+
 /// 展示路由列表
 ///
 /// # Arguments
@@ -131,33 +204,13 @@ pub fn show_route_list(page_size: usize, current_page: usize) -> Result<(), NetR
     // 计算总页数
     let current_page = parse_page_info(routes.len(), page_size, current_page);
 
-    // 实现表格展示路由列表
-    let mut table = Table::new();
-    table.add_row(row![
-        "目标地址",
-        "prefix",
-        "网关地址",
-        "目标网卡",
-        "metric",
-        "LUID",
-        "协议版本"
-    ]);
-    for route in routes
-        .iter()
+    let route_vec = routes
+        .into_iter()
         .skip((current_page - 1) * page_size)
         .take(page_size)
-    {
-        table.add_row(row![
-            route.destination.to_string(),
-            route.prefix.to_string(),
-            route.gateway.to_string(),
-            route.ifindex.map_or("NONE".to_string(), |v| v.to_string()),
-            route.metric.map_or("NONE".to_string(), |v| v.to_string()),
-            route.luid.map_or("NONE".to_string(), |v| v.to_string()),
-            format!("IPv{}", route.version)
-        ]);
-    }
-    table.printstd();
+        .collect::<Vec<Route>>();
+    // 打印路由列表
+    show_route_table(&route_vec);
     Ok(())
 }
 
@@ -201,6 +254,41 @@ pub fn add_route(
     };
     let win_route = WinRoute::new()?;
     win_route.add_ip_route(dest_ip, prefix, if_index, gateway, metric)
+}
+
+pub fn remove_route(destination: &String, prefix: &u8) -> Result<(), NetRouteError> {
+    // 解析目标地址
+    let dest_ip: IpAddr = destination.parse().map_err(|_| {
+        NetRouteError::new(format!("Invalid destination IP address: {}", destination))
+    })?;
+    // 查询路由表
+    let win_route = WinRoute::new()?;
+    let route_vec = win_route.search_route(&dest_ip, prefix, None, None)?;
+    if route_vec.is_empty() {
+        println!("路由表中没有找到匹配的路由: {}/{}", dest_ip, prefix);
+        return Ok(());
+    } else {
+        println!("匹配到的路由:");
+        show_route_table(&route_vec);
+    }
+    // 如果匹配的路由不止一条，提示用户选择
+    let mut num = 0;
+    if route_vec.len() > 1 {
+        num = user_input::user_select_num("请选择需要删除的路由序号", 0, route_vec.len())?;
+    }
+    // 如果找到匹配的路由，需要用户确认删除
+    user_input::user_check("是否删除匹配的路由？")?;
+    // 创建路由
+    let route = match route_vec.get(num) {
+        Some(route) => route,
+        None => {
+            return Err(NetRouteError::new(format!(
+                "路由表中没有找到匹配的路由: {}",
+                dest_ip
+            )));
+        }
+    };
+    win_route.remove_route(route)
 }
 
 #[cfg(test)]

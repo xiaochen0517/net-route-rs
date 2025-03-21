@@ -47,6 +47,16 @@ pub enum RouteActions {
         #[command(subcommand)]
         action: RouteAddActions,
     },
+    /// 删除路由
+    Remove {
+        /// 目标 IP 地址
+        #[arg(long = "dest")]
+        destination: String,
+
+        /// 目标 IP 子网掩码
+        #[arg(long, default_value_t = 32)]
+        prefix: u8,
+    },
 }
 
 /// 添加路由方法类型

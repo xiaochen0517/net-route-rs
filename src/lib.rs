@@ -37,6 +37,10 @@ pub fn run() -> Result<(), NetRouteError> {
                         no_check,
                     } => route::add_route(destination, prefix, if_index, gateway, metric, no_check),
                 },
+                RouteActions::Remove {
+                    destination,
+                    prefix,
+                } => Ok(route::remove_route(destination, prefix)?),
             },
             Commands::Interface { action } => match action {
                 InterfaceActions::List {} => interface::show_interface_list(),

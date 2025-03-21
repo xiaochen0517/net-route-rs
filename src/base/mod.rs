@@ -1,3 +1,5 @@
+pub mod user_input;
+
 use std::error::Error;
 use std::fmt;
 

@@ -1,16 +1,17 @@
 use crate::route::WinRoute;
+use test_case::test_case;
 
-#[test]
-fn win_route_new_success() {
+#[test_case(true ; "测试创建路由类")]
+fn win_route_new_success(expected: bool) {
     let result = WinRoute::new();
-    assert!(result.is_ok(), "Expected WinRoute creation to succeed");
+    assert_eq!(result.is_ok(), expected);
 }
 
-#[test]
-fn win_route_get_routes_success() {
+#[test_case(true ; "测试获取路由信息")]
+fn win_route_get_routes_success(expected: bool) {
     let win_route = WinRoute::new();
-    assert!(win_route.is_ok(), "Expected WinRoute creation to succeed");
+    assert_eq!(win_route.is_ok(), expected);
     let win_route = win_route.unwrap();
     let result = win_route.get_routes();
-    assert!(result.is_ok(), "Expected get_routes to succeed");
+    assert_eq!(result.is_ok(), expected);
 }
