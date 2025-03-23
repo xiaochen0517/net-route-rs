@@ -26,6 +26,12 @@ pub enum Commands {
         #[command(subcommand)]
         action: InterfaceActions,
     },
+    /// 网络信息相关命令
+    Net {
+        /// 网络信息相关命令
+        #[command(subcommand)]
+        action: NetActions,
+    },
 }
 
 /// 路由相关指令
@@ -50,8 +56,16 @@ pub enum RouteActions {
     /// 删除路由
     Remove {
         /// 目标 IP 地址
-        #[arg(long = "dest")]
+        #[arg(long = "dest", default_value_t = String::new())]
         destination: String,
+
+        /// 目标 IP 地址
+        #[arg(long, default_value_t = String::new())]
+        domain: String,
+
+        /// 网卡索引
+        #[arg(long = "ifindex")]
+        if_index: Option<u32>,
 
         /// 目标 IP 子网掩码
         #[arg(long, default_value_t = 32)]
@@ -62,6 +76,7 @@ pub enum RouteActions {
 /// 添加路由方法类型
 #[derive(Subcommand)]
 pub enum RouteAddActions {
+    /// 使用 IP 地址添加路由
     Ip {
         /// 目标 IP 地址
         #[arg(long = "dest")]
@@ -87,6 +102,24 @@ pub enum RouteAddActions {
         #[arg(long, default_value_t = false)]
         no_check: bool,
     },
+    /// 使用域名添加路由
+    Domain {
+        /// 目标 IP 地址
+        #[arg(long)]
+        domain: String,
+
+        /// 网卡索引
+        #[arg(long = "ifindex")]
+        if_index: u32,
+
+        /// 路由度量值，值越小优先级越高
+        #[arg(long, default_value_t = 0)]
+        metric: u32,
+
+        /// 是否检查目标地址是否可达
+        #[arg(long, default_value_t = false)]
+        no_check: bool,
+    },
 }
 
 /// 网络接口相关指令
@@ -94,6 +127,17 @@ pub enum RouteAddActions {
 pub enum InterfaceActions {
     /// 展示网络接口列表
     List {},
+}
+
+/// 网络信息相关指令
+#[derive(Subcommand)]
+pub enum NetActions {
+    /// Dns 解析域名 IP 地址
+    Dns {
+        /// 解析的域名
+        #[arg(long)]
+        domain: String,
+    },
 }
 
 /// 检查输入的内容是否小于 1，如果小于 1 则返回错误

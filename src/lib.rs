@@ -6,7 +6,7 @@ mod interface;
 mod route;
 
 use crate::base::NetRouteError;
-use crate::command::{Cli, Commands, InterfaceActions, RouteActions, RouteAddActions};
+use crate::command::{Cli, Commands, InterfaceActions, NetActions, RouteActions, RouteAddActions};
 use clap::Parser;
 
 /// 程序入口主方法
@@ -36,14 +36,35 @@ pub fn run() -> Result<(), NetRouteError> {
                         metric,
                         no_check,
                     } => route::add_route(destination, prefix, if_index, gateway, metric, no_check),
+                    RouteAddActions::Domain {
+                        domain,
+                        if_index,
+                        metric,
+                        no_check,
+                    } => route::add_domain_route(domain, if_index, metric, no_check),
                 },
                 RouteActions::Remove {
                     destination,
+                    domain,
+                    if_index,
                     prefix,
-                } => Ok(route::remove_route(destination, prefix)?),
+                } => {
+                    if destination.is_empty() {
+                        Ok(route::remove_domain_route(domain, if_index)?)
+                    } else if domain.is_empty() {
+                        Ok(route::remove_route(destination, prefix)?)
+                    } else {
+                        Err(NetRouteError::new(
+                            "目标 IP 地址和域名必须有一个不为空".to_string(),
+                        ))
+                    }
+                }
             },
             Commands::Interface { action } => match action {
                 InterfaceActions::List {} => interface::show_interface_list(),
+            },
+            Commands::Net { action } => match action {
+                NetActions::Dns { domain } => route::show_domain_ips_info(domain),
             },
         },
         None => {
