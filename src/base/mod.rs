@@ -1,4 +1,5 @@
 pub mod user_input;
+pub mod files;
 
 use std::error::Error;
 use std::fmt;

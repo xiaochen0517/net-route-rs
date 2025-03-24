@@ -1,4 +1,4 @@
-use crate::base::{user_input, NetRouteError};
+use crate::base::{NetRouteError, files, user_input};
 use crate::interface::{AdapterInfo, Interface};
 use encoding_rs::GBK;
 use prettytable::Table;
@@ -275,9 +275,9 @@ pub fn add_route(
 }
 
 /// 解析域名的IP地址列表
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `domain` - 域名
 fn parse_domain(domain: &String) -> Result<Vec<IpAddr>, NetRouteError> {
     // 解析域名的IP地址列表
@@ -289,11 +289,10 @@ fn parse_domain(domain: &String) -> Result<Vec<IpAddr>, NetRouteError> {
         .collect::<Vec<IpAddr>>())
 }
 
-
 /// 显示域名的IP地址列表
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `domain` - 域名
 pub fn show_domain_ips_info(domain: &String) -> Result<(), NetRouteError> {
     let ip_list = parse_domain(domain)?;
@@ -307,14 +306,14 @@ pub fn show_domain_ips_info(domain: &String) -> Result<(), NetRouteError> {
 }
 
 /// 添加域名路由
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `domain` - 域名
 /// * `if_index` - 网卡索引
 /// * `metric` - 路由度量值，值越小优先级越高
 /// * `no_check` - 是否检查目标地址是否可达
-/// 
+///
 pub fn add_domain_route(
     domain: &String,
     if_index: &u32,
@@ -347,12 +346,12 @@ pub fn add_domain_route(
 }
 
 /// 删除路由
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `destination` - 目标 IP 地址
 /// * `prefix` - 目标 IP 子网掩码
-/// 
+///
 pub fn remove_route(destination: &String, prefix: &u8) -> Result<(), NetRouteError> {
     // 解析目标地址
     let dest_ip: IpAddr = destination.parse().map_err(|_| {
@@ -393,12 +392,12 @@ pub fn remove_route(destination: &String, prefix: &u8) -> Result<(), NetRouteErr
 }
 
 /// 删除域名路由
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `domain` - 域名
 /// * `if_index` - 网卡索引
-/// 
+///
 pub fn remove_domain_route(domain: &String, if_index: &Option<u32>) -> Result<(), NetRouteError> {
     // 解析域名的IP地址列表
     let ip_list = parse_domain(&domain)?;
@@ -422,6 +421,22 @@ pub fn remove_domain_route(domain: &String, if_index: &Option<u32>) -> Result<()
     println!("路由移除成功！");
     show_route_table(&route_list);
     Ok(())
+}
+
+pub fn apply_config_file(config_path: &Option<String>) -> Result<(), NetRouteError> {
+    match config_path {
+        None => Err(NetRouteError::new("配置文件路径不能为空".to_string())),
+        Some(path) => {
+            if path.is_empty() {
+                return Err(NetRouteError::new("配置文件路径不能为空".to_string()));
+            }
+            // 读取配置文件
+            let content = files::read_file_content(path)?;
+            // 输出
+            println!("{}", content);
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]

@@ -32,6 +32,12 @@ pub enum Commands {
         #[command(subcommand)]
         action: NetActions,
     },
+    /// 使用配置文件
+    Config {
+        /// 配置文件路径
+        #[arg(long)]
+        path: Option<String>,
+    },
 }
 
 /// 路由相关指令

@@ -66,6 +66,7 @@ pub fn run() -> Result<(), NetRouteError> {
             Commands::Net { action } => match action {
                 NetActions::Dns { domain } => route::show_domain_ips_info(domain),
             },
+            Commands::Config { path } => Ok(route::apply_config_file(path)?),
         },
         None => {
             println!("无效的命令");
