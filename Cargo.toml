@@ -1,7 +1,14 @@
 [package]
 name = "net-route-rs"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
+authors = ["xiaochen0517"]
+description = "网络路由管理工具"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/xiaochen0517/net-route-rs"
+keywords = ["network", "route", "windows"]
+categories = ["command-line-utilities", "network-programming"]
 
 [lib]
 name = "net_route_rs_lib"
@@ -17,3 +24,21 @@ serde_json = "1.0.140"
 test-case = "3.3.1"
 winroute = "0.2.1"
 serde = { version = "1.0.219", features = ["derive"] }
+
+[[bin]]
+name = "net-route-rs"
+path = "src/main.rs"
+
+[profile.release]
+# 优化级别，3是最高优化，适合发布
+opt-level = 3
+# 开启 LTO (Link Time Optimization) 以减小二进制文件大小
+lto = true
+# 开启代码大小优化
+codegen-units = 1
+# 减小二进制文件大小
+strip = true
+# 启用紧急情况时的恐慌展开
+panic = "abort"
+# 优化内联功能
+incremental = false

@@ -14,14 +14,6 @@ use clap::Parser;
 pub fn run() -> Result<(), NetRouteError> {
     let cli = Cli::parse();
 
-    // 打印调试信息
-    match cli.debug {
-        0 => println!("Debug mode is off"),
-        1 => println!("Debug mode is kind of on"),
-        2 => println!("Debug mode is on"),
-        _ => println!("Don't be crazy"),
-    }
-
     // 处理子命令
     match &cli.command {
         Some(command) => match command {
