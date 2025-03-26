@@ -37,6 +37,12 @@ pub enum Commands {
         /// 配置文件路径
         #[arg(long)]
         path: Option<String>,
+        /// 跳过确认
+        #[arg(short = 'y', long, default_value_t = false)]
+        no_confirm: bool,
+        /// 取消应用此配置文件
+        #[arg(short = 'c', long, default_value_t = false)]
+        cancel: bool,
     },
 }
 

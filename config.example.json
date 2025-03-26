@@ -1,13 +1,12 @@
 {
   "routes": [
     {
-      "ifindex": 10,
-      "domain": [
-        "baidu.com"
+      "ifindex": 28,
+      "domains": [
+        "baidu.com",
+        "frp-mix.com"
       ],
-      "ips": [
-        "10.0.0.1"
-      ]
+      "ips": []
     }
   ]
 }

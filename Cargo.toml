@@ -13,5 +13,7 @@ encoding_rs = "0.8.35"
 ipconfig = "0.3.2"
 network-interface = "2.0.0"
 prettytable-rs = "0.10.0"
+serde_json = "1.0.140"
 test-case = "3.3.1"
 winroute = "0.2.1"
+serde = { version = "1.0.219", features = ["derive"] }

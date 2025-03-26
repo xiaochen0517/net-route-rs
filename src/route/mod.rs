@@ -1,5 +1,6 @@
 use crate::base::{NetRouteError, files, user_input};
 use crate::interface::{AdapterInfo, Interface};
+use crate::route::config::RouteConfigData;
 use encoding_rs::GBK;
 use prettytable::Table;
 use std::net::IpAddr;
@@ -25,7 +26,7 @@ impl WinRoute {
         }
     }
 
-    pub fn search_route(
+    pub fn search_route_by_ip(
         &self,
         dest: &IpAddr,
         prefix: &u8,
@@ -45,7 +46,7 @@ impl WinRoute {
             .collect::<Vec<Route>>())
     }
 
-    pub fn search_route_vec(
+    pub fn search_route_by_ip_vec(
         &self,
         ip_vec: Vec<IpAddr>,
         prefix: &u8,
@@ -65,6 +66,13 @@ impl WinRoute {
             .collect::<Vec<Route>>())
     }
 
+    pub fn add_route(&self, route: &Route) -> Result<(), NetRouteError> {
+        self.manager
+            .add_route(route)
+            .map_err(|err| NetRouteError::new(format!("添加路由错误: {}", err)))?;
+        Ok(())
+    }
+
     pub fn add_ip_route(
         &self,
         destination: IpAddr,
@@ -79,7 +87,8 @@ impl WinRoute {
         route = route.gateway(gateway);
         route = route.metric(*metric);
         // 查询路由表
-        let search_route_vec = self.search_route(&destination, prefix, Some(if_index), None)?;
+        let search_route_vec =
+            self.search_route_by_ip(&destination, prefix, Some(if_index), None)?;
         if !search_route_vec.is_empty() {
             println!("路由表中已存在匹配的路由！");
             show_route_table(&search_route_vec);
@@ -228,6 +237,18 @@ pub fn show_route_list(page_size: usize, current_page: usize) -> Result<(), NetR
     Ok(())
 }
 
+pub fn get_adapter_by_if_index(if_index: &u32) -> Result<AdapterInfo, NetRouteError> {
+    let interface = Interface::new();
+    let adapter = interface.get_interface_by_index(if_index)?;
+    Ok(adapter)
+}
+
+pub fn get_gateway_ip_by_if_index(if_index: &u32) -> Result<IpAddr, NetRouteError> {
+    let adapter = get_adapter_by_if_index(if_index)?;
+    let ipv4_gateway = Interface::get_ipv4_gateway(&adapter)?;
+    Ok(ipv4_gateway)
+}
+
 /// 添加路由
 ///
 /// # Arguments
@@ -248,15 +269,14 @@ pub fn add_route(
     no_check: &bool,
 ) -> Result<(), NetRouteError> {
     // 检查if_index网卡是否存在
-    let interface = Interface::new();
-    let adapter = interface.get_interface_by_index(if_index)?;
-    let ipv4_gateway = Interface::get_ipv4_gateway(&adapter)?;
+    let ipv4_gateway = get_gateway_ip_by_if_index(if_index)?;
     // 解析目标地址
     let dest_ip: IpAddr = destination.parse().map_err(|_| {
         NetRouteError::new(format!("Invalid destination IP address: {}", destination))
     })?;
     // 检查目标地址和网卡是否可达
     if !*no_check {
+        let adapter = get_adapter_by_if_index(if_index)?;
         ping_from_interface(destination, &adapter)?;
     }
     // 解析网关地址
@@ -359,7 +379,7 @@ pub fn remove_route(destination: &String, prefix: &u8) -> Result<(), NetRouteErr
     })?;
     // 查询路由表
     let win_route = WinRoute::new()?;
-    let route_vec = win_route.search_route(&dest_ip, prefix, None, None)?;
+    let route_vec = win_route.search_route_by_ip(&dest_ip, prefix, None, None)?;
     if route_vec.is_empty() {
         println!("路由表中没有找到匹配的路由: {}/{}", dest_ip, prefix);
         return Ok(());
@@ -404,7 +424,7 @@ pub fn remove_domain_route(domain: &String, if_index: &Option<u32>) -> Result<()
     // 获取路由信息
     let win_route = WinRoute::new()?;
     // 查询路由表
-    let route_list = win_route.search_route_vec(ip_list, &32, if_index, None)?;
+    let route_list = win_route.search_route_by_ip_vec(ip_list, &32, if_index, None)?;
     if route_list.is_empty() {
         println!("路由表中没有找到匹配的路由: {}", domain);
         return Ok(());
@@ -423,21 +443,107 @@ pub fn remove_domain_route(domain: &String, if_index: &Option<u32>) -> Result<()
     Ok(())
 }
 
-pub fn apply_config_file(config_path: &Option<String>) -> Result<(), NetRouteError> {
-    match config_path {
-        None => Err(NetRouteError::new("配置文件路径不能为空".to_string())),
-        Some(path) => {
-            if path.is_empty() {
-                return Err(NetRouteError::new("配置文件路径不能为空".to_string()));
-            }
-            // 读取配置文件
-            let content = files::read_file_content(path)?;
-            // 输出
-            println!("{}", content);
-            Ok(())
+fn parse_config_to_repeat_and_add_routes(
+    win_route: &WinRoute,
+    route_config_data: RouteConfigData,
+) -> Result<(Vec<Route>, Vec<Route>), NetRouteError> {
+    let mut repeat_route_vec = vec![];
+    let mut add_route_list = vec![];
+    for route_config in route_config_data.routes {
+        let mut add_ip_addr_list = vec![];
+        // 解析域名的IP地址列表
+        for domain in route_config.domains {
+            // 解析域名的IP地址列表
+            let parsed_ip_list = parse_domain(&domain)?;
+            add_ip_addr_list.extend(parsed_ip_list.clone());
+            // 查询路由表是否存在重复的路由
+            repeat_route_vec.extend(win_route.search_route_by_ip_vec(
+                parsed_ip_list,
+                &32,
+                &None,
+                None,
+            )?);
+        }
+        let ip_addr_vec = route_config
+            .ips
+            .iter()
+            .map(|ip_str| {
+                ip_str.parse::<IpAddr>().map_err(|_| {
+                    NetRouteError::new(format!("Invalid destination IP address: {}", ip_str))
+                })
+            })
+            .collect::<Result<Vec<IpAddr>, NetRouteError>>()?;
+        add_ip_addr_list.extend(ip_addr_vec.clone());
+        let route_vec = win_route.search_route_by_ip_vec(ip_addr_vec, &32, &None, None)?;
+        repeat_route_vec.extend(route_vec);
+
+        // 生成路由
+        let if_index = route_config.ifindex;
+        // 获取ifindex
+        let gateway_ip = get_gateway_ip_by_if_index(&if_index)?;
+        for add_ip_addr in add_ip_addr_list {
+            let mut route = Route::new(add_ip_addr, 32);
+            route = route.ifindex(if_index);
+            route = route.gateway(gateway_ip);
+            route = route.metric(0);
+            add_route_list.push(route);
         }
     }
+    Ok((repeat_route_vec, add_route_list))
 }
 
+/// 应用配置文件
+///
+/// # Arguments
+///
+/// * `config_path` - 配置文件路径
+/// * `no_confirm` - 是否跳过确认
+///
+pub fn apply_config_file(
+    config_path: &Option<String>,
+    no_confirm: &bool,
+    cancel: &bool,
+) -> Result<(), NetRouteError> {
+    let path = config_path
+        .as_ref()
+        .ok_or_else(|| NetRouteError::new("配置文件路径不能为空".to_string()))?;
+    let file_content = files::read_file_content(path)?;
+    let config = config::parse_config_file(&file_content)?;
+
+    let win_route = WinRoute::new()?;
+    let (repeat_route_vec, add_route_list) =
+        parse_config_to_repeat_and_add_routes(&win_route, config)?;
+    if !repeat_route_vec.is_empty() {
+        println!("路由表中已存在匹配的路由！");
+        show_route_table(&repeat_route_vec);
+        if !*no_confirm {
+            user_input::user_check("是否移除已存在的路由？")?;
+        }
+        // 移除重复的路由
+        for route in repeat_route_vec.iter() {
+            println!("移除路由: {}", route.destination);
+            win_route.remove_route(route)?;
+        }
+        println!("已移除重复的路由！");
+    }
+    if *cancel {
+        println!("已取消应用此配置文件！");
+        return Ok(());
+    }
+    println!("需要添加的路由:");
+    show_route_table(&add_route_list);
+    if !*no_confirm {
+        user_input::user_check("是否继续添加路由？")?;
+    }
+    // 添加路由
+    for route in add_route_list.iter() {
+        println!("添加路由: {}", route.destination);
+        win_route.add_route(route)?;
+    }
+    println!("路由添加成功！");
+    Ok(())
+}
+
+mod config;
 #[cfg(test)]
 mod tests;
